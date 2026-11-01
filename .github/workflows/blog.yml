@@ -1,0 +1,35 @@
+# 置き場所：リポジトリ KUROFUNEMAN/car4shield-site の .github/workflows/blog.yml
+# （公開.sh は「.」で始まるフォルダを写さないので、これは手で1回だけ置く。手引き「こちら側の設定」の③）
+# CMS（/admin/）で記事を保存すると content/blog/*.md が入る → これが走って HTML を作り、同じリポジトリに入れ直す。
+name: blog
+on:
+  push:
+    branches: [main]
+    paths: ['content/blog/**', 'img/blog/uploads/**', '_cms/**']
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+concurrency:
+  group: blog
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: md を HTML に
+        run: python3 _cms/md2html.py .
+      - name: リポジトリに入れる
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A blog index.html sitemap.xml _cms/generated.json
+          if git diff --cached --quiet; then echo "変わったところなし"; exit 0; fi
+          git commit -m "ブログの HTML を作り直し（CMS）"
+          git push
+      - name: GitHub Pages を作り直す
+        # Actions の中からの push では Pages が動かないことがあるので、念のため頼む（失敗しても止めない）
+        run: gh api -X POST "repos/${GITHUB_REPOSITORY}/pages/builds" || true
+        env:
+          GH_TOKEN: ${{ github.token }}
