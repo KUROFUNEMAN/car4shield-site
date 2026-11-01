@@ -7,7 +7,7 @@
 <title>ブログを書く｜car 4 shield fukuoka</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="apple-mobile-web-app-title" content="ブログ投稿">
-<!-- 西村様がスマホでブログを書く画面。合言葉（4桁）だけで入る。
+<!-- 西村様がスマホでブログを書く画面。合言葉だけで入る。
      書いた記事は Cloudflare Workers（c4s-blog）を通って GitHub の content/blog に入り、1〜2分でブログに載る。
      受け口の元：src/blog_worker/worker.js（置き直しは src/blog_worker/deploy.py） -->
 <style>
@@ -23,7 +23,7 @@ label{display:block;font-size:14px;color:var(--soft);margin:18px 0 6px}
 input,select,textarea{width:100%;font:inherit;font-size:16px;color:var(--on);background:var(--ink-2);border:1px solid var(--hair);border-radius:10px;padding:12px}
 textarea{min-height:260px;resize:vertical}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--gold);outline-offset:1px}
-.pin{font-size:32px;letter-spacing:.5em;text-align:center}
+.pin{font-size:24px;letter-spacing:.2em;text-align:center}
 button{font:inherit;font-weight:700;border-radius:10px;padding:13px 18px;border:1px solid var(--gold);background:var(--gold);color:#16130c;cursor:pointer}
 button.sub{background:transparent;color:var(--on);border-color:var(--hair);font-weight:500}
 button.ng{background:transparent;color:var(--ng);border-color:var(--ng)}
@@ -59,7 +59,7 @@ button:disabled{opacity:.5}
   <!-- 合言葉 -->
   <section id="v-login">
     <h1>合言葉を入れてください</h1>
-    <input id="pass" class="pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="8" aria-label="合言葉">
+    <input id="pass" class="pin" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="current-password" maxlength="40" aria-label="合言葉">
     <div class="row"><button id="b-login">入る</button></div>
     <p class="msg" id="m-login"></p>
   </section>
@@ -123,7 +123,7 @@ button:disabled{opacity:.5}
       .then(function (r) { return r.json(); })
       .catch(function () { return { ok: false, msg: 'つながりませんでした。電波の良いところでもう一度押してください。' }; });
   }
-  function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+  function esc(s) { return String(s || '').replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
   // ── 入る ──
   function login() {
