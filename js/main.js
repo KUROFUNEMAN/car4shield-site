@@ -434,3 +434,151 @@
     mo.observe(mf);
   } else if (mf) mf.src = mf.dataset.src;
 })();
+
+/* ════════ v3（2026-10-31）：入場の動画・相談フォームの事前入力・YouTube・施工事例の絞り込み・寸法の計算・固定バー・導線の目次 ════════ */
+(function () {
+  'use strict';
+  var d = document, cfg = window.C4S || {};
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ① 入場の動画：config.js の heroVideo に mp4 を入れると無音ループで再生。空なら何もしない */
+  var hx = d.querySelector('.hx-hero'), hv = d.querySelector('.hx-video video');
+  if (hx && hv && cfg.heroVideo) {
+    hx.classList.add('has-video');
+    if (cfg.heroPoster) hv.poster = cfg.heroPoster;
+    hv.addEventListener('playing', function () { hx.classList.add('is-playing'); });
+    var conn = navigator.connection || {}, save = !!conn.saveData || /(^|-)2g$/.test(conn.effectiveType || '');
+    if (!reduce && !save) {
+      var narrow = window.matchMedia('(max-width:760px)').matches;
+      hv.muted = true; hv.defaultMuted = true; hv.setAttribute('muted', ''); hv.setAttribute('autoplay', '');
+      hv.preload = 'auto'; hv.src = (narrow && cfg.heroVideoSp) || cfg.heroVideo;
+      var tryPlay = function () { var p = hv.play(); if (p && p.catch) p.catch(function () {}); };
+      tryPlay();
+      if ('IntersectionObserver' in window) {
+        new IntersectionObserver(function (es) { if (es[0].isIntersecting) tryPlay(); else hv.pause(); }, { threshold: 0.05 }).observe(hx);
+      }
+    }
+  }
+
+  /* ② お問い合わせフォーム：?svc= ?car= ?part= ?from= で、項目が入った状態で開く */
+  var SVC = { ppf: 'プロテクションフィルムについて', wrap: 'カーラッピングについて', coating: 'カーコーティングについて', glass: 'フロントガラスプロテクションについて', detail: 'その他' };
+  var SVCN = { ppf: 'PPF（プロテクションフィルム）', wrap: 'カーラッピング', coating: 'カーコーティング', glass: 'フロントガラス保護', detail: '洗車・磨き' };
+  var form = d.querySelector('form.form');
+  var fKind = d.getElementById('f-kind'), fCar = d.getElementById('f-car'), fPart = d.getElementById('f-part'), fFrom = d.getElementById('f-from'), fPre = d.getElementById('f-pre');
+  function syncChips() {
+    if (!fPart) return;
+    var v = fPart.value.split(/[・、,，\s]+/).filter(Boolean);
+    d.querySelectorAll('.part-chips button').forEach(function (b) { b.setAttribute('aria-pressed', v.indexOf(b.dataset.part) >= 0 ? 'true' : 'false'); });
+  }
+  function prefill(o) {
+    if (!form) return;
+    var said = [];
+    if (o.svc && SVC[o.svc] && fKind) { fKind.value = SVC[o.svc]; said.push(SVCN[o.svc]); }
+    if (o.car && fCar) { fCar.value = o.car; said.push(o.car); }
+    if (o.part && fPart) { fPart.value = o.part; said.push(o.part); syncChips(); }
+    if (o.from && fFrom) fFrom.value = o.from;
+    if (fPre) {
+      if (said.length) { fPre.hidden = false; fPre.textContent = '「' + said.join('」「') + '」を入れた状態で開きました。違っていれば書き換えてください。'; }
+    }
+  }
+  try {
+    var q = new URLSearchParams(location.search);
+    if (q.get('svc') || q.get('car') || q.get('part') || q.get('from')) prefill({ svc: q.get('svc'), car: q.get('car'), part: q.get('part'), from: q.get('from') });
+  } catch (e) {}
+  /* 同じページにフォームがある時は、読み込み直さずに入れてフォームへ */
+  d.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[data-svc]');
+    if (!a || !form) return;
+    e.preventDefault();
+    prefill({ svc: a.dataset.svc, car: a.dataset.car || '', part: a.dataset.part || '', from: a.dataset.from || '' });
+    var c = d.getElementById('contact');
+    c.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    try { history.replaceState(null, '', a.getAttribute('href')); } catch (err) {}
+    c.classList.remove('flash'); void c.offsetWidth; c.classList.add('flash');
+    setTimeout(function () { var t = (fKind && !fKind.value) ? fKind : d.getElementById('f-name'); if (t) t.focus({ preventScroll: true }); }, reduce ? 0 : 700);
+  });
+  /* 施工箇所のボタン */
+  d.querySelectorAll('.part-chips button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var v = fPart.value.split(/[・、,，\s]+/).filter(Boolean), k = b.dataset.part, i = v.indexOf(k);
+      if (k === 'まだ決めていない') v = i >= 0 ? [] : [k];
+      else { v = v.filter(function (x) { return x !== 'まだ決めていない'; }); if (i >= 0) v.splice(i, 1); else v.push(k); }
+      fPart.value = v.join('・'); syncChips();
+    });
+  });
+  if (fPart) fPart.addEventListener('input', syncChips);
+
+  /* ③ YouTube：サムネを押してから読み込む（軽い） */
+  d.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('button.yt[data-yt]');
+    if (!b) return;
+    var f = d.createElement('div'); f.className = 'yt-frame' + (b.classList.contains('short') ? ' short' : '');
+    var i = d.createElement('iframe');
+    i.src = 'https://www.youtube-nocookie.com/embed/' + b.dataset.yt + '?autoplay=1&rel=0&playsinline=1&modestbranding=1';
+    i.title = b.getAttribute('aria-label') || 'YouTube'; i.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'; i.allowFullscreen = true;
+    f.appendChild(i); b.replaceWith(f);
+  });
+
+  /* ④ 施工事例の絞り込み（/works/?part=front など） */
+  var flt = d.querySelector('.flt');
+  if (flt) {
+    var st = { part: '', worry: '', svc: '', brand: '' }, cards = d.querySelectorAll('.cc'), cnt = flt.querySelector('[data-count]'), clr = flt.querySelector('.flt-clear'), empty = d.querySelector('.flt-empty');
+    try { var qq = new URLSearchParams(location.search); Object.keys(st).forEach(function (k) { st[k] = qq.get(k) || ''; }); } catch (e) {}
+    function run() {
+      var n = 0;
+      cards.forEach(function (c) {
+        var ok = Object.keys(st).every(function (k) { return !st[k] || (' ' + c.dataset[k] + ' ').indexOf(' ' + st[k] + ' ') >= 0; });
+        c.hidden = !ok; if (ok) n++;
+      });
+      flt.querySelectorAll('button[data-f]').forEach(function (b) { b.setAttribute('aria-pressed', st[b.dataset.f] === b.dataset.v ? 'true' : 'false'); });
+      cnt.textContent = n; empty.hidden = n > 0;
+      var any = Object.keys(st).some(function (k) { return st[k]; }); clr.hidden = !any;
+      try { var p = new URLSearchParams(); Object.keys(st).forEach(function (k) { if (st[k]) p.set(k, st[k]); }); history.replaceState(null, '', location.pathname + (p.toString() ? '?' + p : '')); } catch (e) {}
+    }
+    flt.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-f]');
+      if (b) { st[b.dataset.f] = st[b.dataset.f] === b.dataset.v ? '' : b.dataset.v; run(); }
+    });
+    clr.addEventListener('click', function () { Object.keys(st).forEach(function (k) { st[k] = ''; }); run(); });
+    run();
+  }
+
+  /* ⑤ 車検証の寸法からサイズと目安 */
+  var PZ = [['S', 10.5, 233800, 770000, 693000], ['M', 12.2, 288800, 841500, 770000], ['L', 14.0, 335500, 935000, 858000], ['LL', 17.7, 385000, 1155000, 990000], ['XL', 1e9, 440000, 1342000, 1265000]];
+  var yen = function (n) { return '¥' + n.toLocaleString('ja-JP'); };
+  d.querySelectorAll('[data-calc]').forEach(function (box) {
+    var ins = box.querySelectorAll('input'), out = box.querySelector('[data-out]'), first = out.innerHTML;
+    function calc() {
+      var v = {}; ins.forEach(function (i) { v[i.dataset.d] = parseFloat(i.value); });
+      if (!(v.l > 0 && v.w > 0 && v.h > 0)) { out.innerHTML = first; return; }
+      var m3 = (v.l / 100) * (v.w / 100) * (v.h / 100), z = PZ[0];
+      for (var k = 0; k < PZ.length; k++) { z = PZ[k]; if (k === 0 ? m3 < PZ[0][1] : m3 <= PZ[k][1]) break; }
+      out.innerHTML = 'サイズ<b>' + z[0] + '</b>（' + m3.toFixed(1) + '㎥）── PPF フロントフルセット ' + yen(z[2]) + '〜 ／ PPF ボディフルセット ' + yen(z[3]) + '〜 ／ フルラッピング ' + yen(z[4]) + '〜（目安）';
+      var sb = d.querySelector('.sizes button[data-size="' + z[0] + '"]'); if (sb && sb.getAttribute('aria-pressed') !== 'true') sb.click();
+    }
+    ins.forEach(function (i) { i.addEventListener('input', calc); });
+  });
+
+  /* ⑥ スマホ下部の固定バー：ヒーローを過ぎたら出す。お問い合わせの所では隠す */
+  var bar = d.querySelector('.spbar'), contact = d.getElementById('contact'), inContact = false;
+  if (bar) {
+    var sb2 = function () { bar.classList.toggle('show', window.scrollY > window.innerHeight * 0.6 && !inContact); };
+    if (contact && 'IntersectionObserver' in window) new IntersectionObserver(function (es) { inContact = es[0].isIntersecting; sb2(); }, { threshold: 0.15 }).observe(contact);
+    window.addEventListener('scroll', sb2, { passive: true }); sb2();
+  }
+
+  /* ⑦ 導線の目次（PC 左）：今どの段か */
+  var jr = d.querySelector('.journey');
+  if (jr) {
+    var links = jr.querySelectorAll('a'), tgs = [].map.call(links, function (a) { return d.getElementById(a.dataset.j); }), ft = d.querySelector('.ft'), rafJ = 0;
+    var jupd = function () {
+      rafJ = 0;
+      var vh = window.innerHeight, cur = -1;
+      tgs.forEach(function (t, i) { if (t && t.getBoundingClientRect().top < vh * 0.45) cur = i; });
+      var nearFt = ft && ft.getBoundingClientRect().top < vh * 0.8;
+      jr.classList.toggle('show', window.scrollY > vh * 0.9 && !nearFt);
+      links.forEach(function (a, i) { a.classList.toggle('on', i === cur); });
+    };
+    window.addEventListener('scroll', function () { if (!rafJ) rafJ = requestAnimationFrame(jupd); }, { passive: true }); jupd();
+  }
+})();

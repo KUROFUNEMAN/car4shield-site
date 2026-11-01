@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>ブログを書く｜car 4 shield fukuoka</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="apple-mobile-web-app-title" content="ブログ投稿">
+<!-- 西村様がスマホでブログを書く画面。合言葉（4桁）だけで入る。
+     書いた記事は Cloudflare Workers（c4s-blog）を通って GitHub の content/blog に入り、1〜2分でブログに載る。
+     受け口の元：src/blog_worker/worker.js（置き直しは src/blog_worker/deploy.py） -->
+<style>
+:root{--ink:#0c0d0e;--ink-2:#141618;--ink-3:#1d2023;--on:#ecebe6;--soft:#a3a6a9;--hair:rgba(255,255,255,.14);--gold:#c9a96a;--ng:#e0806e}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--ink);color:var(--on);font:16px/1.7 "Zen Kaku Gothic New","Hiragino Sans",sans-serif;-webkit-text-size-adjust:100%}
+.wrap{max-width:720px;margin:0 auto;padding:20px 16px calc(40px + env(safe-area-inset-bottom))}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0 18px;border-bottom:1px solid var(--hair);margin-bottom:20px}
+header b{font-family:"Cormorant Garamond",serif;font-size:20px;letter-spacing:.06em;font-weight:500}
+header small{display:block;color:var(--soft);font-size:12px}
+h1{font-size:20px;margin:0 0 14px;font-weight:700}
+label{display:block;font-size:14px;color:var(--soft);margin:18px 0 6px}
+input,select,textarea{width:100%;font:inherit;font-size:16px;color:var(--on);background:var(--ink-2);border:1px solid var(--hair);border-radius:10px;padding:12px}
+textarea{min-height:260px;resize:vertical}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--gold);outline-offset:1px}
+.pin{font-size:32px;letter-spacing:.5em;text-align:center}
+button{font:inherit;font-weight:700;border-radius:10px;padding:13px 18px;border:1px solid var(--gold);background:var(--gold);color:#16130c;cursor:pointer}
+button.sub{background:transparent;color:var(--on);border-color:var(--hair);font-weight:500}
+button.ng{background:transparent;color:var(--ng);border-color:var(--ng)}
+button:disabled{opacity:.5}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+.row button{flex:1 1 140px}
+.msg{min-height:1.7em;margin-top:12px;color:var(--gold)}
+.msg.ng{color:var(--ng)}
+.list{list-style:none;padding:0;margin:0}
+.list li{display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--hair);cursor:pointer}
+.list img,.list .noimg{width:72px;height:54px;object-fit:cover;border-radius:6px;background:var(--ink-3);flex:none}
+.list .t{font-weight:500;line-height:1.5}
+.list .d{color:var(--soft);font-size:13px}
+.imgs{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:8px}
+.imgs div{position:relative;aspect-ratio:4/3;border-radius:8px;overflow:hidden;background:var(--ink-3)}
+.imgs img{width:100%;height:100%;object-fit:cover}
+.imgs span{position:absolute;left:4px;top:4px;background:rgba(0,0,0,.7);font-size:11px;padding:1px 6px;border-radius:4px}
+.imgs button{position:absolute;right:4px;top:4px;padding:2px 9px;font-size:13px;background:rgba(0,0,0,.7);border-color:transparent;color:#fff}
+.hint{color:var(--soft);font-size:13px;margin:6px 0 0}
+.note{background:var(--ink-2);border:1px solid var(--hair);border-radius:10px;padding:12px 14px;color:var(--soft);font-size:13px;margin-top:26px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><div><b>car 4 shield fukuoka</b><small>ブログ投稿</small></div><button class="sub" id="out" hidden>おわる</button></header>
+
+  <!-- 合言葉 -->
+  <section id="v-login">
+    <h1>合言葉を入れてください</h1>
+    <input id="pass" class="pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="8" aria-label="合言葉">
+    <div class="row"><button id="b-login">入る</button></div>
+    <p class="msg" id="m-login"></p>
+  </section>
+
+  <!-- 記事の一覧 -->
+  <section id="v-list" hidden>
+    <div class="row" style="margin-top:0"><button id="b-new">＋ 新しい記事を書く</button></div>
+    <h1 style="margin-top:28px">書いた記事</h1>
+    <p class="msg" id="m-list"></p>
+    <ul class="list" id="list"></ul>
+    <p class="note">ここに出るのは、この画面で書いた記事だけです。前からある記事は直せません。</p>
+  </section>
+
+  <!-- 書く・直す -->
+  <section id="v-edit" hidden>
+    <h1 id="e-h">新しい記事</h1>
+    <label for="f-title">題名</label>
+    <input id="f-title" placeholder="例）ポルシェ 911 GT3 RS にフロントのプロテクションフィルムを施工">
+    <label for="f-car">車種（なくてよい）</label>
+    <input id="f-car" placeholder="例）メルセデス・ベンツ G63">
+    <label for="f-service">サービス</label>
+    <select id="f-service"><option value="">選ばない</option><option>プロテクションフィルム</option><option>カーラッピング</option><option>カーコーティング</option><option>フロントガラス保護</option><option>洗車・磨き</option></select>
+    <label>写真</label>
+    <input id="f-file" type="file" accept="image/*" multiple>
+    <p class="hint">1枚目が記事のいちばん上と一覧の写真になります。ナンバープレートが写った写真は使わないでください。</p>
+    <div class="imgs" id="imgs"></div>
+    <label for="f-body">本文</label>
+    <textarea id="f-body" placeholder="施工した場所・理由・使ったフィルム・仕上がりなど"></textarea>
+    <p class="hint">行のはじめに「## 」で見出し、「- 」で箇条書きになります。</p>
+    <label for="f-desc">一覧に出す短い説明（なくてよい）</label>
+    <input id="f-desc">
+    <div class="row">
+      <button id="b-save">保存してブログに載せる</button>
+      <button class="sub" id="b-back">一覧へ戻る</button>
+    </div>
+    <div class="row" id="del-row" hidden><button class="ng" id="b-del">この記事を消す</button></div>
+    <p class="msg" id="m-edit"></p>
+  </section>
+</div>
+
+<script>
+(function () {
+  var API = 'https://c4s-blog.ryoumayy.workers.dev/';
+  var $ = function (id) { return document.getElementById(id); };
+  var pass = '', slug = null, kept = [], added = [];
+  try { pass = localStorage.getItem('c4s-pass') || ''; } catch (e) {}
+
+  function show(v) { ['login', 'list', 'edit'].forEach(function (k) { $('v-' + k).hidden = k !== v; }); $('out').hidden = v === 'login'; scrollTo(0, 0); }
+  function say(id, t, ng) { var m = $(id); m.textContent = t || ''; m.className = 'msg' + (ng ? ' ng' : ''); }
+  function call(act, data) {
+    data = data || {}; data.pass = pass;
+    return fetch(API + act, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+      .then(function (r) { return r.json(); })
+      .catch(function () { return { ok: false, msg: 'つながりませんでした。電波の良いところでもう一度押してください。' }; });
+  }
+  function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+  // ── 入る ──
+  function login() {
+    pass = $('pass').value.trim() || pass; if (!pass) return;
+    say('m-login', '確かめています…');
+    call('login').then(function (r) {
+      if (!r.ok) { say('m-login', r.msg, true); try { localStorage.removeItem('c4s-pass'); } catch (e) {} pass = ''; show('login'); return; }
+      try { localStorage.setItem('c4s-pass', pass); } catch (e) {}
+      say('m-login', ''); list();
+    });
+  }
+  $('b-login').onclick = login;
+  $('pass').onkeydown = function (e) { if (e.key === 'Enter') login(); };
+  $('out').onclick = function () { pass = ''; try { localStorage.removeItem('c4s-pass'); } catch (e) {} $('pass').value = ''; show('login'); };
+
+  // ── 一覧 ──
+  function list() {
+    show('list'); say('m-list', '読み込み中…'); $('list').innerHTML = '';
+    call('list').then(function (r) {
+      if (!r.ok) { say('m-list', r.msg, true); return; }
+      say('m-list', r.items.length ? '' : 'まだありません。「新しい記事を書く」から始めてください。');
+      r.items.forEach(function (it) {
+        var li = document.createElement('li');
+        li.innerHTML = (it.image ? '<img src="' + esc(it.image) + '" alt="">' : '<div class="noimg"></div>') +
+          '<div><div class="t">' + esc(it.title) + '</div><div class="d">' + esc((it.date || '').slice(0, 10).replace(/-/g, '.')) + '</div></div>';
+        li.onclick = function () { edit(it.slug); };
+        $('list').appendChild(li);
+      });
+    });
+  }
+  $('b-new').onclick = function () { edit(null); };
+  $('b-back').onclick = list;
+
+  // ── 書く・直す ──
+  function fill(p) {
+    $('f-title').value = p.title || ''; $('f-car').value = p.car || ''; $('f-service').value = p.service || '';
+    $('f-body').value = p.body || ''; $('f-desc').value = p.description || '';
+    kept = (p.images || []).slice(); added = []; $('f-file').value = ''; drawImgs();
+  }
+  function edit(s) {
+    slug = s; show('edit'); say('m-edit', ''); $('e-h').textContent = s ? '記事を直す' : '新しい記事'; $('del-row').hidden = !s;
+    fill({});
+    if (s) { say('m-edit', '読み込み中…'); call('get', { slug: s }).then(function (r) { if (!r.ok) { say('m-edit', r.msg, true); return; } fill(r.post); say('m-edit', ''); }); }
+  }
+  function drawImgs() {
+    var box = $('imgs'); box.innerHTML = '';
+    kept.map(function (u) { return { src: u, k: 1 }; }).concat(added.map(function (a) { return { src: a.url, k: 0 }; })).forEach(function (x, i) {
+      var d = document.createElement('div');
+      d.innerHTML = '<img src="' + esc(x.src) + '" alt="">' + (i === 0 ? '<span>1枚目</span>' : '') + '<button type="button" aria-label="外す">×</button>';
+      d.querySelector('button').onclick = function () { if (x.k) kept.splice(kept.indexOf(x.src), 1); else added.splice(i - kept.length, 1); drawImgs(); };
+      box.appendChild(d);
+    });
+  }
+  // スマホの写真は大きいので、長い方を2000pxまでに縮めて JPEG にする
+  function shrink(file) {
+    return new Promise(function (ok, ng) {
+      var img = new Image(), url = URL.createObjectURL(file);
+      img.onload = function () {
+        var s = Math.min(1, 2000 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+        c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        var data = c.toDataURL('image/jpeg', 0.85);
+        ok({ url: data, b64: data.split(',')[1], type: 'image/jpeg' });
+      };
+      img.onerror = function () { ng(new Error('写真が読めませんでした')); };
+      img.src = url;
+    });
+  }
+  $('f-file').onchange = function (e) {
+    var fs = Array.prototype.slice.call(e.target.files || []);
+    say('m-edit', '写真を準備しています…');
+    Promise.all(fs.map(shrink)).then(function (xs) { added = added.concat(xs); drawImgs(); say('m-edit', ''); $('f-file').value = ''; })
+      .catch(function (er) { say('m-edit', er.message, true); });
+  };
+  $('b-save').onclick = function () {
+    if (!$('f-title').value.trim()) { say('m-edit', '題名を入れてください。', true); return; }
+    var b = this; b.disabled = true; say('m-edit', '保存しています…（写真が多いと少しかかります）');
+    call('save', { slug: slug, post: { title: $('f-title').value.trim(), car: $('f-car').value.trim(), service: $('f-service').value,
+      body: $('f-body').value, description: $('f-desc').value.trim(), images: kept },
+      newImages: added.map(function (a) { return { b64: a.b64, type: a.type }; }) })
+      .then(function (r) {
+        b.disabled = false;
+        if (!r.ok) { say('m-edit', r.msg, true); return; }
+        edit(r.slug);
+        setTimeout(function () { say('m-edit', '保存しました。1〜2分でブログに載ります。'); }, 900);
+      });
+  };
+  $('b-del').onclick = function () {
+    if (!slug || !confirm('この記事を消します。よろしいですか？')) return;
+    say('m-edit', '消しています…');
+    call('delete', { slug: slug }).then(function (r) { if (!r.ok) { say('m-edit', r.msg, true); return; } list(); });
+  };
+
+  if (pass) { $('pass').value = pass; login(); } else show('login');
+})();
+</script>
+</body>
+</html>
