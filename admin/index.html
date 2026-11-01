@@ -43,6 +43,11 @@ button:disabled{opacity:.5}
 .imgs span{position:absolute;left:4px;top:4px;background:rgba(0,0,0,.7);font-size:11px;padding:1px 6px;border-radius:4px}
 .imgs button{position:absolute;right:4px;top:4px;padding:2px 9px;font-size:13px;background:rgba(0,0,0,.7);border-color:transparent;color:#fff}
 .hint{color:var(--soft);font-size:13px;margin:6px 0 0}
+.mode{display:grid;gap:8px;margin-top:6px}
+.mode label{display:flex;gap:10px;align-items:center;margin:0;padding:12px;border:1px solid var(--hair);border-radius:10px;color:var(--on);font-size:15px}
+.mode input{width:auto;margin:0;accent-color:var(--gold)}
+.st{display:inline-block;font-size:11px;padding:0 7px;border-radius:4px;margin-right:6px;border:1px solid var(--hair);color:var(--soft)}
+.st.pub{border-color:var(--gold);color:var(--gold)}
 .note{background:var(--ink-2);border:1px solid var(--hair);border-radius:10px;padding:12px 14px;color:var(--soft);font-size:13px;margin-top:26px}
 [hidden]{display:none!important}
 </style>
@@ -86,8 +91,16 @@ button:disabled{opacity:.5}
     <p class="hint">行のはじめに「## 」で見出し、「- 」で箇条書きになります。</p>
     <label for="f-desc">一覧に出す短い説明（なくてよい）</label>
     <input id="f-desc">
+    <label>載せ方</label>
+    <div class="mode">
+      <label><input type="radio" name="mode" value="now" checked> すぐ載せる</label>
+      <label><input type="radio" name="mode" value="draft"> 下書き（まだ載せない）</label>
+      <label><input type="radio" name="mode" value="later"> 日時を決めて載せる（予約）</label>
+    </div>
+    <input id="f-when" type="datetime-local" hidden style="margin-top:8px">
+    <p class="hint" id="when-hint" hidden>予約した時刻から1時間ほどのうちに載ります。</p>
     <div class="row">
-      <button id="b-save">保存してブログに載せる</button>
+      <button id="b-save">保存する</button>
       <button class="sub" id="b-back">一覧へ戻る</button>
     </div>
     <div class="row" id="del-row" hidden><button class="ng" id="b-del">この記事を消す</button></div>
@@ -99,7 +112,7 @@ button:disabled{opacity:.5}
 (function () {
   var API = 'https://c4s-blog.ryoumayy.workers.dev/';
   var $ = function (id) { return document.getElementById(id); };
-  var pass = '', slug = null, kept = [], added = [];
+  var pass = '', slug = null, kept = [], added = [], orig = '', wasDraft = false;
   try { pass = localStorage.getItem('c4s-pass') || ''; } catch (e) {}
 
   function show(v) { ['login', 'list', 'edit'].forEach(function (k) { $('v-' + k).hidden = k !== v; }); $('out').hidden = v === 'login'; scrollTo(0, 0); }
@@ -135,11 +148,16 @@ button:disabled{opacity:.5}
       r.items.forEach(function (it) {
         var li = document.createElement('li');
         li.innerHTML = (it.image ? '<img src="' + esc(it.image) + '" alt="">' : '<div class="noimg"></div>') +
-          '<div><div class="t">' + esc(it.title) + '</div><div class="d">' + esc((it.date || '').slice(0, 10).replace(/-/g, '.')) + '</div></div>';
+          '<div><div class="t">' + status(it) + esc(it.title) + '</div><div class="d">' + esc((it.date || '').slice(0, 10).replace(/-/g, '.')) + '</div></div>';
         li.onclick = function () { edit(it.slug); };
         $('list').appendChild(li);
       });
     });
+  }
+  function status(it) {
+    if (it.draft) return '<span class="st">下書き</span>';
+    if (it.date && Date.parse(it.date) > Date.now()) return '<span class="st">予約 ' + esc(it.date.slice(5, 16).replace('-', '/').replace('T', ' ')) + '</span>';
+    return '<span class="st pub">公開中</span>';
   }
   $('b-new').onclick = function () { edit(null); };
   $('b-back').onclick = list;
@@ -149,7 +167,17 @@ button:disabled{opacity:.5}
     $('f-title').value = p.title || ''; $('f-car').value = p.car || ''; $('f-service').value = p.service || '';
     $('f-body').value = p.body || ''; $('f-desc').value = p.description || '';
     kept = (p.images || []).slice(); added = []; $('f-file').value = ''; drawImgs();
+    orig = p.date || ''; wasDraft = p.draft === true;
+    var m = p.draft ? 'draft' : (p.date && Date.parse(p.date) > Date.now() ? 'later' : 'now');
+    document.querySelector('input[name=mode][value=' + m + ']').checked = true;
+    $('f-when').value = m === 'later' ? p.date.slice(0, 16) : ''; modeUi();
   }
+  function mode() { return document.querySelector('input[name=mode]:checked').value; }
+  function modeUi() {
+    var later = mode() === 'later'; $('f-when').hidden = !later; $('when-hint').hidden = !later;
+    $('b-save').textContent = { now: '保存してブログに載せる', draft: '下書きとして保存する', later: '予約して保存する' }[mode()];
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('input[name=mode]'), function (r) { r.onchange = modeUi; });
   function edit(s) {
     slug = s; show('edit'); say('m-edit', ''); $('e-h').textContent = s ? '記事を直す' : '新しい記事'; $('del-row').hidden = !s;
     fill({});
@@ -187,15 +215,25 @@ button:disabled{opacity:.5}
   };
   $('b-save').onclick = function () {
     if (!$('f-title').value.trim()) { say('m-edit', '題名を入れてください。', true); return; }
+    var md = mode(), when = '';
+    if (md === 'later') {
+      if (!$('f-when').value) { say('m-edit', '載せる日時を選んでください。', true); return; }
+      when = $('f-when').value.slice(0, 16) + ':00+09:00';
+      if (Date.parse(when) <= Date.now()) { say('m-edit', '予約の日時が過ぎています。先の日時を選ぶか「すぐ載せる」にしてください。', true); return; }
+    } else if (md === 'now') {
+      // 公開中の記事を直す時は日付をそのまま。下書き・予約から「すぐ載せる」にした時は今の日時
+      when = (orig && Date.parse(orig) <= Date.now() && slug && !wasDraft) ? orig : '';
+    } else { when = orig; }
     var b = this; b.disabled = true; say('m-edit', '保存しています…（写真が多いと少しかかります）');
     call('save', { slug: slug, post: { title: $('f-title').value.trim(), car: $('f-car').value.trim(), service: $('f-service').value,
-      body: $('f-body').value, description: $('f-desc').value.trim(), images: kept },
+      body: $('f-body').value, description: $('f-desc').value.trim(), images: kept, draft: md === 'draft', date: when },
       newImages: added.map(function (a) { return { b64: a.b64, type: a.type }; }) })
       .then(function (r) {
         b.disabled = false;
         if (!r.ok) { say('m-edit', r.msg, true); return; }
         edit(r.slug);
-        setTimeout(function () { say('m-edit', '保存しました。1〜2分でブログに載ります。'); }, 900);
+        var done = { now: '保存しました。1〜2分でブログに載ります。', draft: '下書きとして保存しました。ブログには載っていません。', later: '予約しました。決めた日時から1時間ほどのうちに載ります。' }[md];
+        setTimeout(function () { say('m-edit', done); }, 900);
       });
   };
   $('b-del').onclick = function () {

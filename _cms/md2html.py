@@ -144,6 +144,15 @@ def norm_date(v):
     if not m: return None
     return f'{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}{m.group(4)}'
 
+def future(iso):
+    """公開の予約：日付が今より先なら True（日本時間。時刻の無い日付はその日の0時）"""
+    import datetime as dt
+    m = re.match(r'(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?', iso)
+    if not m: return False
+    y, mo, d, h, mi, se = (int(x or 0) for x in m.groups())
+    jst = dt.timezone(dt.timedelta(hours=9))
+    return dt.datetime(y, mo, d, h, mi, se, tzinfo=jst) > dt.datetime.now(jst)
+
 def img_url(v):
     v = str(v or '').strip()
     if not v: return ''
@@ -178,6 +187,8 @@ def main():
             date = norm_date(meta.get('date'))
             if not title or not date:
                 print(f'とばした（題名か日付が無い）：{fn}'); continue
+            if future(date):
+                print(f'予約（まだ載せない）：{fn} {date}'); continue
             slug = re.sub(r'[^a-z0-9-]+', '-', os.path.splitext(fn)[0].lower()).strip('-') or 'post'
             if slug in legacy_slugs: slug = 'n-' + slug
             imgs = meta.get('images') or []
