@@ -72,21 +72,32 @@ def parse_front(text):
 
 
 # ── Markdown → HTML（よく使う形だけ）──
+SAFE_HREF = re.compile(r'^(https?:|/|#|mailto:|tel:)', re.I)
+
 def inline(s):
-    s = esc(s, quote=False)
-    s = re.sub(r'!\[([^\]]*)\]\(([^)\s]+)[^)]*\)', lambda m: f'<img src="{esc(html.unescape(m.group(2)))}" alt="{esc(html.unescape(m.group(1)))}" loading="lazy">', s)
+    # 作ったタグは \x00番号\x00 で預けて、あとの置き換え（自動リンクなど）が属性の中に入り込まないようにする
+    tags = []
+    def keep(t): tags.append(t); return f'\x00{len(tags) - 1}\x00'
+    s = esc(s.replace('\x00', ''), quote=True)
+    def img(m):
+        src = html.unescape(m.group(2))
+        if not SAFE_HREF.match(src): return m.group(0)
+        return keep(f'<img src="{esc(src)}" alt="{esc(html.unescape(m.group(1)))}" loading="lazy">')
+    s = re.sub(r'!\[([^\]]*)\]\(([^)\s]+)[^)]*\)', img, s)
     def link(m):
         text, href = m.group(1), html.unescape(m.group(2))
+        if not SAFE_HREF.match(href): return m.group(0)     # javascript: などはリンクにしない
         if re.match(r'^(https?:)?//', href) and 'car4shield.co.jp' not in href:
-            return f'<a href="{esc(href)}" target="_blank" rel="noopener">{text}</a>'
-        return f'<a href="{esc(href)}">{text}</a>'
+            return keep(f'<a href="{esc(href)}" target="_blank" rel="noopener">') + text + keep('</a>')
+        return keep(f'<a href="{esc(href)}">') + text + keep('</a>')
     s = re.sub(r'\[([^\]]+)\]\(([^)\s]+)\)', link, s)
     s = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', s)
     s = re.sub(r'(?<![A-Za-z0-9*])\*(?![\s*])(.+?)(?<![\s*])\*(?![A-Za-z0-9*])', r'<em>\1</em>', s)
     s = re.sub(r'~~(.+?)~~', r'<del>\1</del>', s)
     s = re.sub(r'`([^`]+)`', r'<code>\1</code>', s)
-    s = re.sub(r'(?<![="\w>/])(https?://[^\s<"]+)', lambda m: f'<a href="{m.group(1)}"' + ('' if 'car4shield.co.jp' in m.group(1) else ' target="_blank" rel="noopener"') + f'>{m.group(1)}</a>', s)
+    s = re.sub(r'(?<![\w/\x00])(https?://(?:[^\s<&\x00]|&amp;)+)', lambda m: keep(f'<a href="{m.group(1)}"' + ('' if 'car4shield.co.jp' in m.group(1) else ' target="_blank" rel="noopener"') + '>') + m.group(1) + keep('</a>'), s)
     s = re.sub(r'(?: {2,}|\\)\n', '<br>', s)
+    s = re.sub(r'\x00(\d+)\x00', lambda m: tags[int(m.group(1))], s)
     return s.replace('\n', '<br>')
 
 def md_to_html(md):
