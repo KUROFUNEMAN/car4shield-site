@@ -48,6 +48,10 @@ button:disabled{opacity:.5}
 .mode input{width:auto;margin:0;accent-color:var(--gold)}
 .st{display:inline-block;font-size:11px;padding:0 7px;border-radius:4px;margin-right:6px;border:1px solid var(--hair);color:var(--soft)}
 .st.pub{border-color:var(--gold);color:var(--gold)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px}
+.tabs button{flex:1 1 auto;padding:9px 10px;font-size:14px;font-weight:500;background:transparent;color:var(--soft);border-color:var(--hair)}
+.tabs button.on{background:var(--ink-3);color:var(--on);border-color:var(--gold)}
+.list .go{margin-left:auto;font-size:12px;color:var(--gold);text-decoration:none;white-space:nowrap;padding:6px 0 6px 8px}
 .note{background:var(--ink-2);border:1px solid var(--hair);border-radius:10px;padding:12px 14px;color:var(--soft);font-size:13px;margin-top:26px}
 [hidden]{display:none!important}
 </style>
@@ -67,10 +71,13 @@ button:disabled{opacity:.5}
   <!-- 記事の一覧 -->
   <section id="v-list" hidden>
     <div class="row" style="margin-top:0"><button id="b-new">＋ 新しい記事を書く</button></div>
-    <h1 style="margin-top:28px">書いた記事</h1>
+    <h1 style="margin-top:28px">予定表</h1>
+    <div class="tabs" id="tabs">
+      <button data-f="all" class="on">すべて</button><button data-f="later">予約</button><button data-f="draft">下書き</button><button data-f="pub">公開中</button>
+    </div>
     <p class="msg" id="m-list"></p>
     <ul class="list" id="list"></ul>
-    <p class="note">ここに出るのは、この画面で書いた記事だけです。前からある記事は直せません。</p>
+    <p class="note">ここに出るのは、この画面で書いた記事だけです。前からある記事は直せません。予約の記事は、決めた日時から1時間ほどのうちに自動で載り、「公開中」に移ります。</p>
   </section>
 
   <!-- 書く・直す -->
@@ -140,19 +147,37 @@ button:disabled{opacity:.5}
   $('out').onclick = function () { pass = ''; try { localStorage.removeItem('c4s-pass'); } catch (e) {} $('pass').value = ''; show('login'); };
 
   // ── 一覧 ──
+  var items = [], filt = 'all';
+  function kind(it) { return it.draft ? 'draft' : (it.date && Date.parse(it.date) > Date.now() ? 'later' : 'pub'); }
+  Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function (b) {
+    b.onclick = function () { filt = b.getAttribute('data-f'); Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function (x) { x.classList.toggle('on', x === b); }); draw(); };
+  });
   function list() {
     show('list'); say('m-list', '読み込み中…'); $('list').innerHTML = '';
     call('list').then(function (r) {
       if (!r.ok) { say('m-list', r.msg, true); return; }
-      say('m-list', r.items.length ? '' : 'まだありません。「新しい記事を書く」から始めてください。');
+      items = r.items; draw();
+    });
+  }
+  // 並び：予約（近い順）→ 下書き → 公開中（新しい順）
+  function draw() {
+    var order = { later: 0, draft: 1, pub: 2 };
+    var xs = items.filter(function (it) { return filt === 'all' || kind(it) === filt; }).sort(function (a, b) {
+      var ka = kind(a), kb = kind(b); if (ka !== kb) return order[ka] - order[kb];
+      return ka === 'later' ? (a.date < b.date ? -1 : 1) : (a.date < b.date ? 1 : -1);
+    });
+    $('list').innerHTML = '';
+    say('m-list', xs.length ? '' : (items.length ? 'ここに入る記事はありません。' : 'まだありません。「新しい記事を書く」から始めてください。'));
+    (function () { var r = { items: xs };
       r.items.forEach(function (it) {
         var li = document.createElement('li');
         li.innerHTML = (it.image ? '<img src="' + esc(it.image) + '" alt="">' : '<div class="noimg"></div>') +
-          '<div><div class="t">' + status(it) + esc(it.title) + '</div><div class="d">' + esc((it.date || '').slice(0, 10).replace(/-/g, '.')) + '</div></div>';
-        li.onclick = function () { edit(it.slug); };
+          '<div><div class="t">' + status(it) + esc(it.title) + '</div><div class="d">' + esc((it.date || '').slice(0, 16).replace(/-/g, '.').replace('T', ' ')) + '</div></div>';
+        if (kind(it) === 'pub') li.innerHTML += '<a class="go" href="/blog/' + esc(it.slug) + '/" target="_blank" rel="noopener">ブログで見る</a>';
+        li.onclick = function (e) { if (e.target.classList.contains('go')) return; edit(it.slug); };
         $('list').appendChild(li);
       });
-    });
+    })();
   }
   function status(it) {
     if (it.draft) return '<span class="st">下書き</span>';

@@ -208,6 +208,9 @@ def main():
             imgs = [x for x in imgs if x]
             svc = str(meta.get('service') or '').strip(); car = str(meta.get('car') or '').strip()
             desc = str(meta.get('description') or '').strip() or plain(body)
+            # 型の差し込み印（CMS◯◯0）と同じ文字が書かれても組み立てが止まらないように、間に見えない文字を挟む
+            sf = lambda x: re.sub(r'CMS(?=[A-Z]+0)', 'CMS\u200b', x)
+            title, desc, body, svc, car = sf(title), sf(desc), sf(body), sf(svc), sf(car)
             posts.append(dict(fn=fn, slug=slug, title=title, date=date, imgs=imgs, svc=svc, car=car, tag=TAGS.get(svc, svc or 'ブログ'), desc=desc, body=body))
     # 新しい順（旧記事と混ぜる）
     allp = [dict(kind='old', **p) for p in legacy] + [dict(kind='new', slug=p['slug'], title=p['title'], date=p['date'], p=p) for p in posts]
