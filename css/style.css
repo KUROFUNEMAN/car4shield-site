@@ -282,6 +282,7 @@ table.pt thead th{font-weight:500;font-size:12px;letter-spacing:.1em;color:var(-
 .reel blockquote.instagram-media{margin:0!important;min-width:0!important;width:100%!important;max-width:100%!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:var(--ink-3)!important;padding:0!important}
 .reel iframe.instagram-media{min-width:0!important;width:100%!important;max-width:100%!important;border-radius:0!important;margin:0!important}
 .ig-fb{display:block;position:relative;text-decoration:none;color:var(--on-dark);background:var(--ink-3)}
+.ig-fb picture{display:block}
 .ig-fb img{width:100%;aspect-ratio:4/5;object-fit:cover}
 .ig-fb span{position:absolute;left:0;right:0;bottom:0;padding:40px 16px 14px;font-size:12.5px;letter-spacing:.12em;background:linear-gradient(transparent,rgba(0,0,0,.75))}
 .ig-fb .play{position:absolute;top:50%;left:50%;width:58px;height:58px;margin:-29px;border-radius:50%;border:1px solid rgba(255,255,255,.85);background:rgba(0,0,0,.25)}

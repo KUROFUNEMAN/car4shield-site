@@ -411,21 +411,8 @@
     d.querySelectorAll('.rc').forEach(function (el) { lo.observe(el); });
   }
 
-  /* Instagram：施工事例に近づいたら公式の埋め込みを読む。読めなければサムネイルとリンクのまま */
-  var reels = d.querySelector('.reels, .gal');
-  if (reels) {
-    var loaded = false;
-    function loadIG() {
-      if (loaded) return; loaded = true;
-      var s = d.createElement('script'); s.async = true; s.src = 'https://www.instagram.com/embed.js';
-      s.onload = function () { if (window.instgrm) window.instgrm.Embeds.process(); };
-      d.body.appendChild(s);
-    }
-    if ('IntersectionObserver' in window) {
-      var ig = new IntersectionObserver(function (es) { if (es[0].isIntersecting) { loadIG(); ig.disconnect(); } }, { rootMargin: '600px 0px' });
-      ig.observe(reels);
-    } else loadIG();
-  }
+  /* Instagram の公式埋め込み（embed.js）は読まない（旧店名が Instagram から直接出るため 2026-11-01）。
+     施工事例は手元の表紙＋「Instagram で見る」のリンクだけ */
 
   /* map は近づいてから読む */
   var mf = d.querySelector('iframe[data-src]');
